@@ -1,4 +1,4 @@
-# nvim/
+# My neovim configuration
 
 <a href="https://dotfyle.com/MVS-99/nvim"><img src="https://dotfyle.com/MVS-99/nvim/badges/plugins?style=flat" /></a>
 <a href="https://dotfyle.com/MVS-99/nvim"><img src="https://dotfyle.com/MVS-99/nvim/badges/leaderkey?style=flat" /></a>
