@@ -5,14 +5,21 @@ return {
     -- LSP Support
     {'neovim/nvim-lspconfig'},
     {'lvimuser/lsp-inlayhints.nvim'},
-    {'simrat39/rust-tools.nvim'},
+    {'mrcjkb/rustaceanvim',
+      version = '^4', --Recommended
+      ft = { 'rust' },
+    },
     {'williamboman/mason.nvim'},
     {'williamboman/mason-lspconfig.nvim'},
     {'SmiteshP/nvim-navic'},
     -- Autocompletion
     {'hrsh7th/nvim-cmp'},     -- Required
     {'hrsh7th/cmp-nvim-lsp'}, -- Required
-    {'L3MON4D3/LuaSnip'},     -- Required
+    {'hrsh7th/cmp-buffer'},
+    {'hrsh7th/cmp-path'},
+    {'L3MON4D3/LuaSnip',
+      dependencies = {'rafamadriz/friendly-snippets'}
+    },     -- Required
   },
   config = function()
     local lsp_zero = require('lsp-zero')
@@ -36,6 +43,12 @@ return {
       end
 
     end)
+
+    vim.g.rustaceanvim = {
+      server = {
+        capabilities = lsp_zero.get_capabilities()
+      }
+    }
 
     -- Set navic highlight groups
     vim.api.nvim_set_hl(0, "NavicIconsFile",          {default = true, bg = "#282828", fg = "#EBDBB2"})
@@ -65,7 +78,7 @@ return {
     vim.api.nvim_set_hl(0, "NavicIconsOperator",      {default = true, bg = "#282828", fg = "#83A598"})
     vim.api.nvim_set_hl(0, "NavicIconsTypeParameter", {default = true, bg = "#282828", fg = "#83A598"})
     vim.api.nvim_set_hl(0, "NavicText",               {default = true, bg = "#282828", fg = "#EBDBB2"})
-    vim.api.nvim_set_hl(0, "NavicSeparator",          {default = true, bg = "#282828", fg = "#504945"}) 
+    vim.api.nvim_set_hl(0, "NavicSeparator",          {default = true, bg = "#282828", fg = "#504945"})
     require('nvim-navic').setup({
       highlight = true,
     })
@@ -75,6 +88,7 @@ return {
       ensure_installed = {},
       handlers = {
         lsp_zero.default_setup,
+        rust_analyzer = lsp_zero.noop,
         lua_ls = function()
           local lua_opts = lsp_zero.nvim_lua_ls()
           require('lspconfig').lua_ls.setup(lua_opts)
@@ -85,6 +99,8 @@ return {
     local cmp = require('cmp')
     local cmp_select = {behavior = cmp.SelectBehavior.Select}
 
+    require('luasnip.loaders.from_vscode').lazy_load()
+
     cmp.setup({
       sources = {
         {name = 'path'},
@@ -92,6 +108,10 @@ return {
         {name = 'nvim_lua'},
         {name = 'luasnip', keyword_length = 2},
         {name = 'buffer', keyword_length = 3},
+      },
+      window = {
+        completion = cmp.config.window.bordered(),
+        documentation = cmp.config.window.bordered(),
       },
       formatting = lsp_zero.cmp_format(),
       mapping = cmp.mapping.preset.insert({

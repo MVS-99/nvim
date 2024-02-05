@@ -1,5 +1,5 @@
 return{
-  "TobinPalmer/Tip.nvim",
+  {"TobinPalmer/Tip.nvim",
   event = "VimEnter",
   init = function()
     -- Default config
@@ -7,8 +7,8 @@ return{
     require("tip").setup({
       seconds = 2,
       title = "Tip!",
-      url = "https://vtip.43z.one",
+      url = "https://www.vimiscool.tech/neotip",
     })
-  end,
-  dependencies = {"rcarriga/nvim-notify"}
+  end},
+  {"rcarriga/nvim-notify"}
 }
