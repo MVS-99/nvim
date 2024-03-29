@@ -11,6 +11,12 @@ return {
     },
     {'williamboman/mason.nvim'},
     {'williamboman/mason-lspconfig.nvim'},
+    {'mfussenegger/nvim-dap',
+      dependencies = {
+        "jay-babu/mason-nvim-dap.nvim",
+        "rcarriga/nvim-dap-ui",
+      }
+    },
     {'SmiteshP/nvim-navic'},
     -- Autocompletion
     {'hrsh7th/nvim-cmp'},     -- Required
@@ -22,12 +28,15 @@ return {
     },     -- Required
   },
   config = function()
+    require("neodev").setup({})
+
     local lsp_zero = require('lsp-zero')
 
     lsp_zero.on_attach(function(client, bufnr)
       local opts = {buffer = bufnr, remap = false}
 
-      vim.keymap.set("n", "gd", function() vim.lsp.buf.definition() end, opts)
+      vim.keymap.set("n", "gdf", function() vim.lsp.buf.definition() end, opts)
+      vim.keymap.set("n", "gdc", function() vim.lsp.buf.declaration() end, opts)
       vim.keymap.set("n", "K", function() vim.lsp.buf.hover() end, opts)
       vim.keymap.set("n", "<leader>vws", function() vim.lsp.buf.workspace_symbol() end, opts)
       vim.keymap.set("n", "<leader>vd", function() vim.diagnostic.open_float() end, opts)
@@ -95,6 +104,7 @@ return {
         end,
       }
     })
+    require('mason-nvim-dap').setup()
 
     local cmp = require('cmp')
     local cmp_select = {behavior = cmp.SelectBehavior.Select}
@@ -108,10 +118,6 @@ return {
         {name = 'nvim_lua'},
         {name = 'luasnip', keyword_length = 2},
         {name = 'buffer', keyword_length = 3},
-      },
-      window = {
-        completion = cmp.config.window.bordered(),
-        documentation = cmp.config.window.bordered(),
       },
       formatting = lsp_zero.cmp_format(),
       mapping = cmp.mapping.preset.insert({
