@@ -24,7 +24,9 @@ return {
     {'hrsh7th/cmp-buffer'},
     {'hrsh7th/cmp-path'},
     {'L3MON4D3/LuaSnip',
-      dependencies = {'rafamadriz/friendly-snippets'}
+      dependencies = {'rafamadriz/friendly-snippets'},
+      version = "v2.*", -- Replace <CurrentMajor> by the latest released major
+      build = "make install_jsregexp",
     },     -- Required
   },
   config = function()
