@@ -28,6 +28,19 @@ return {
       version = "v2.*", -- Replace <CurrentMajor> by the latest released major
       build = "make install_jsregexp",
     },     -- Required
+    {"jay-babu/mason-null-ls.nvim",
+      event = { "BufReadPre", "BufNewFile" },
+      dependencies = {"nvimtools/none-ls.nvim"},
+      config = function()
+        require("mason-null-ls").setup({
+          ensure_installed = {
+            -- Opt to list sources here, when available in mason.
+          },
+          automatic_installation = false,
+          handlers = {},
+        })
+      end,
+    },
   },
   config = function()
     require("neodev").setup({})
@@ -106,7 +119,13 @@ return {
         end,
       }
     })
-    require('mason-nvim-dap').setup()
+    require('mason-nvim-dap').setup({
+      handlers = {
+        function(config)
+          require("mason-nvim-dap").default_setup(config)
+        end,
+      }, -- sets up dap in the predefined manner
+    })
 
     local cmp = require('cmp')
     local cmp_select = {behavior = cmp.SelectBehavior.Select}
@@ -125,7 +144,7 @@ return {
       mapping = cmp.mapping.preset.insert({
         ['<C-p>'] = cmp.mapping.select_prev_item(cmp_select),
         ['<C-n>'] = cmp.mapping.select_next_item(cmp_select),
-        ['<C-y>'] = cmp.mapping.confirm({ select = true }),
+        ['<CR>'] = cmp.mapping.confirm({ select = true }),
         ['<C-Space>'] = cmp.mapping.complete(),
       }),
     })
