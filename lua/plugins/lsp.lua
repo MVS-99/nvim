@@ -5,12 +5,29 @@ return {
     -- LSP Support
     {'neovim/nvim-lspconfig'},
     {'lvimuser/lsp-inlayhints.nvim'},
+    {'williamboman/mason.nvim'},
+    {'williamboman/mason-lspconfig.nvim'},
     {'mrcjkb/rustaceanvim',
       version = '^4', --Recommended
       ft = { 'rust' },
     },
-    {'williamboman/mason.nvim'},
-    {'williamboman/mason-lspconfig.nvim'},
+    {
+      "folke/lazydev.nvim",
+      ft = "lua", --only load on lua files
+      opts = {
+        library = {
+          "/luvit-meta/library",
+          -- Library items can be absolute paths
+          -- "~/projects/my-awesome-lib",
+          -- Or relative, which means they will be resolved as a plugin
+          -- "LazyVim",
+          -- When relative, you can also provide a path to the library in the plugin
+        },
+      },
+    },
+    {
+      "Bilal2453/luvit-meta", lazy = true, --optional `vim.uv` typings
+    },
     {'mfussenegger/nvim-dap',
       dependencies = {
         "jay-babu/mason-nvim-dap.nvim",
@@ -19,7 +36,16 @@ return {
     },
     {'SmiteshP/nvim-navic'},
     -- Autocompletion
-    {'hrsh7th/nvim-cmp'},     -- Required
+    {
+      'hrsh7th/nvim-cmp',
+      opts = function(_, opts)
+        opts.sources = opts.sources or {}
+        table.insert(opts.sources, {
+          name = "lazydev",
+          group_index =  0 -- to skip loading luals completions
+        })
+      end,
+    },     -- Required
     {'hrsh7th/cmp-nvim-lsp'}, -- Required
     {'hrsh7th/cmp-buffer'},
     {'hrsh7th/cmp-path'},
@@ -43,7 +69,6 @@ return {
     },
   },
   config = function()
-    require("neodev").setup({})
 
     local lsp_zero = require('lsp-zero')
 

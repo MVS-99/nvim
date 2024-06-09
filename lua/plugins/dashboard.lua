@@ -52,6 +52,8 @@ return{
                 key = 'c',
             },
           },
+          packages = { enable = true}, -- show how many plugins neovim has loaded
+          project = { enable = true, limit = 10, icon = "", action = "Telescope find_files cwd="},
           footer = {' 󱢿 Si vis pacem, para bellum 󰞇'}
         },    --  config used for theme
       hide = {
