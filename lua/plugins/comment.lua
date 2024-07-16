@@ -43,7 +43,6 @@ return{
       ---Function to call after (un)comment
       post_hook = nil,
     },
-    lazy = false,
   },
   {"folke/todo-comments.nvim",
     dependencies = {"nvim-lua/plenary.nvim"}

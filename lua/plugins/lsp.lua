@@ -151,7 +151,7 @@ return {
         end,
       }, -- sets up dap in the predefined manner
     })
-
+    
     local cmp = require('cmp')
     local cmp_select = {behavior = cmp.SelectBehavior.Select}
 
@@ -173,5 +173,7 @@ return {
         ['<C-Space>'] = cmp.mapping.complete(),
       }),
     })
+
+
   end,
 }
