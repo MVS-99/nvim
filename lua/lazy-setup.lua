@@ -13,3 +13,6 @@ vim.opt.rtp:prepend(lazypath)
 
 require("lazy").setup("plugins", {})
 
+vim.cmd[[colorscheme tokyonight-night]]
+
+vim.api.nvim_set_hl(0, 'DashboardHeader', { fg = '#c53b53', bg = '#1a1b26', bold = true })
