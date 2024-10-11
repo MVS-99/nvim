@@ -3,10 +3,20 @@ return {
     dependencies = { 'nvim-tree/nvim-web-devicons' },
     config = function()
       local navic = require("nvim-navic")
+      local function diff_source()
+        local gitsigns = vim.b.gitsigns_status_dict
+        if gitsigns then
+          return {
+            added = gitsigns.added,
+            modified = gitsigns.changed,
+            removed = gitsigns.removed
+          }
+        end
+      end
       require('lualine').setup{
         sections = {
           lualine_a = {'mode'},
-          lualine_b = {'branch', 'diff', 'diagnostics'},
+          lualine_b = { {'diff', source = diff_source}, },
           lualine_c = {
             {function ()
               return navic.get_location()

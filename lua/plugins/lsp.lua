@@ -1,6 +1,6 @@
 return {
   'VonHeikemen/lsp-zero.nvim',
-  branch = 'v3.x',
+  branch = 'v4.x',
   dependencies = {
     -- LSP Support
     {'neovim/nvim-lspconfig'},
@@ -50,7 +50,10 @@ return {
     {'hrsh7th/cmp-buffer'},
     {'hrsh7th/cmp-path'},
     {'L3MON4D3/LuaSnip',
-      dependencies = {'rafamadriz/friendly-snippets'},
+      dependencies = {
+        {'rafamadriz/friendly-snippets'},
+        { 'saadparwaiz1/cmp_luasnip' }
+      },
       version = "v2.*", -- Replace <CurrentMajor> by the latest released major
       build = "make install_jsregexp",
     },     -- Required
@@ -71,8 +74,31 @@ return {
   config = function()
 
     local lsp_zero = require('lsp-zero')
+    local cmp = require('cmp')
+    local cmp_select = {behavior = cmp.SelectBehavior.Select}
 
-    lsp_zero.on_attach(function(client, bufnr)
+    cmp.setup({
+      sources = {
+        {name = 'path'},
+        {name = 'nvim_lsp'},
+        {name = 'nvim_lua'},
+        {name = 'luasnip', keyword_length = 2},
+        {name = 'buffer', keyword_length = 3},
+      },
+      snippet = {
+        expand = function(args)
+          require('luasnip').lsp_expand(args.body)
+        end
+      },
+      mapping = cmp.mapping.preset.insert({
+        ['<C-p>'] = cmp.mapping.select_prev_item(cmp_select),
+        ['<C-n>'] = cmp.mapping.select_next_item(cmp_select),
+        ['<CR>'] = cmp.mapping.confirm({ select = true }),
+        ['<C-Space>'] = cmp.mapping.complete(),
+      }),
+    })
+
+    local lsp_attach = function(client, bufnr)
       local opts = {buffer = bufnr, remap = false}
 
       vim.keymap.set("n", "gdf", function() vim.lsp.buf.definition() end, opts)
@@ -91,7 +117,14 @@ return {
         require('nvim-navic').attach(client, bufnr)
       end
 
-    end)
+    end
+
+    lsp_zero.extend_lspconfig({
+      capabilities = require('cmp_nvim_lsp').default_capabilities(),
+      lsp_attach = lsp_attach,
+      float_border = 'rounded',
+      sign_text = true,
+    })
 
     vim.g.rustaceanvim = {
       server = {
@@ -152,28 +185,7 @@ return {
       }, -- sets up dap in the predefined manner
     })
     
-    local cmp = require('cmp')
-    local cmp_select = {behavior = cmp.SelectBehavior.Select}
-
     require('luasnip.loaders.from_vscode').lazy_load()
-
-    cmp.setup({
-      sources = {
-        {name = 'path'},
-        {name = 'nvim_lsp'},
-        {name = 'nvim_lua'},
-        {name = 'luasnip', keyword_length = 2},
-        {name = 'buffer', keyword_length = 3},
-      },
-      formatting = lsp_zero.cmp_format(),
-      mapping = cmp.mapping.preset.insert({
-        ['<C-p>'] = cmp.mapping.select_prev_item(cmp_select),
-        ['<C-n>'] = cmp.mapping.select_next_item(cmp_select),
-        ['<CR>'] = cmp.mapping.confirm({ select = true }),
-        ['<C-Space>'] = cmp.mapping.complete(),
-      }),
-    })
-
 
   end,
 }
