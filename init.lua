@@ -55,18 +55,20 @@ vim.opt.updatetime = 50
 
 vim.g.mapleader = " "
 
--- Clipboard hotfix (chapuza en producción)
-vim.cmd([[ let g:clipboard = {
-    \ 'name': 'WslClipboard',
-    \ 'copy': {
-        \ '+': 'clip.exe',
-        \ '*': 'clip.exe',
-    \ },
-    \ 'paste': {
-        \ '+': 'powershell.exe -c [Console]::Out.Write($(Get-Clipboard -Raw).tostring().replace("`r", ""))',
-        \ '*': 'powershell.exe -c [Console]::Out.Write($(Get-Clipboard -Raw).tostring().replace("`r", ""))',
-    \ },
-    \ 'cache_enabled': 0,
-\ }]])
+if vim.fn.has('wsl') == 1 then
+   -- Clipboard hotfix (chapuza en producción)
+   vim.cmd([[ let g:clipboard = {
+      \ 'name': 'WslClipboard',
+      \ 'copy': {
+         \ '+': 'clip.exe',
+         \ '*': 'clip.exe',
+      \ },
+      \ 'paste': {
+         \ '+': 'powershell.exe -c [Console]::Out.Write($(Get-Clipboard -Raw).tostring().replace("`r", ""))',
+         \ '*': 'powershell.exe -c [Console]::Out.Write($(Get-Clipboard -Raw).tostring().replace("`r", ""))',
+      \ },
+      \ 'cache_enabled': 0,
+   \}]])
+end
 
 require("lazy-setup")
