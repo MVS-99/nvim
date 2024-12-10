@@ -5,7 +5,7 @@ if not vim.loop.fs_stat(lazypath) then
     "clone",
     "--filter=blob:none",
     "https://github.com/folke/lazy.nvim.git",
-    "--branch=stable", -- latest stable release
+    "--branch=stable", -- Latest stable release
     lazypath,
   })
 end
@@ -15,4 +15,3 @@ require("lazy").setup("plugins", {})
 
 vim.cmd[[colorscheme tokyonight-night]]
 
-vim.api.nvim_set_hl(0, 'DashboardHeader', { fg = '#c53b53', bg = '#1a1b26', bold = true })

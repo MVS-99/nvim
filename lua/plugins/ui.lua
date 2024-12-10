@@ -1,5 +1,9 @@
 return{
-  {'stevearc/dressing.nvim',
-  opts = {},
-  },
+   {'stevearc/dressing.nvim',
+      opts = {},
+   },
+   {
+      "j-hui/fidget.nvim",
+      opts = {},
+   }
 }
