@@ -7,12 +7,6 @@ return
       rocks = { "magick" },
     },
   },
-  {"nvim-neorg/neorg",
-    dependencies = { "luarocks.nvim" },
-    lazy = false,
-    version = "*", -- Latest stable release
-    config = true
-  },
   {
     "iamcco/markdown-preview.nvim",
     cmd = { "MarkdownPreviewToggle", "MarkdownPreview", "MarkdownPreviewStop" },

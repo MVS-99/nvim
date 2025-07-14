@@ -2,7 +2,6 @@ return {
     "nvim-lualine/lualine.nvim",
     dependencies = { 'nvim-tree/nvim-web-devicons' },
     config = function()
-      local navic = require("nvim-navic")
       local function diff_source()
         local gitsigns = vim.b.gitsigns_status_dict
         if gitsigns then
@@ -17,15 +16,7 @@ return {
         sections = {
           lualine_a = {'mode'},
           lualine_b = { {'diff', source = diff_source}, },
-          lualine_c = {
-            {function ()
-              return navic.get_location()
-            end,
-            cond = function ()
-              return navic.is_available()
-            end
-            },
-          },
+          lualine_c = { 'filename' },
           lualine_x = {'encoding', 'fileformat', 'filetype'},
           lualine_y = {'progress'},
           lualine_z = {'location'}

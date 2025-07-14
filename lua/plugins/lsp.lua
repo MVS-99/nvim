@@ -1,192 +1,1016 @@
 return {
-   'VonHeikemen/lsp-zero.nvim',
-   branch = 'v4.x',
-   dependencies = {
-      -- LSP Support
-      {'neovim/nvim-lspconfig'},
-      {'lvimuser/lsp-inlayhints.nvim'},
-      {'williamboman/mason.nvim'},
-      {'williamboman/mason-lspconfig.nvim'},
-      {
-         "folke/lazydev.nvim",
-         ft = "lua", --only load on lua files
-         opts = {
-            library = {
-               "/luvit-meta/library",
-               -- Library items can be absolute paths
-               -- "~/projects/my-awesome-lib",
-               -- Or relative, which means they will be resolved as a plugin
-               -- "LazyVim",
-               -- When relative, you can also provide a path to the library in the plugin
-            },
-         },
-      },
-      {
-         "Bilal2453/luvit-meta", lazy = true, --optional `vim.uv` typings
-      },
-      {'mfussenegger/nvim-dap',
-         dependencies = {
-            "jay-babu/mason-nvim-dap.nvim",
-            "rcarriga/nvim-dap-ui",
-         }
-      },
-      {'SmiteshP/nvim-navic'},
-      -- Autocompletion
-      {
-         'hrsh7th/nvim-cmp',
-         opts = function(_, opts)
-            opts.sources = opts.sources or {}
-            table.insert(opts.sources, {
-               name = "lazydev",
-               group_index =  0 -- to skip loading luals completions
-            })
-         end,
-      },     -- Required
-      {'hrsh7th/cmp-nvim-lsp'}, -- Required
-      {'hrsh7th/cmp-buffer'},
-      {'hrsh7th/cmp-path'},
-      {'L3MON4D3/LuaSnip',
-         dependencies = {
-            {'rafamadriz/friendly-snippets'},
-            { 'saadparwaiz1/cmp_luasnip' }
-         },
-         version = "v2.*", -- Replace <CurrentMajor> by the latest released major
-         build = "make install_jsregexp",
-      },     -- Required
-      {"jay-babu/mason-null-ls.nvim",
-         event = { "BufReadPre", "BufNewFile" },
-         dependencies = {"nvimtools/none-ls.nvim"},
-         config = function()
-            require("mason-null-ls").setup({
-               ensure_installed = {
-                  -- Opt to list sources here, when available in mason.
-               },
-               automatic_installation = false,
-               handlers = {},
-            })
-         end,
-      },
-   },
-   config = function()
-      local cmp = require('cmp')
-      local lsp_zero = require("lsp-zero")
-      local cmp_select = {behavior = cmp.SelectBehavior.Select}
-      local lspconfig_defaults = require('lspconfig').util.default_config
-      lspconfig_defaults.capabilities = vim.tbl_deep_extend(
-         'force',
-         lspconfig_defaults.capabilities,
-         require('cmp_nvim_lsp').default_capabilities()
-      )
+	-- Mason package manager
+	{
+		"mason-org/mason.nvim",
+		version = "^2.0.0",
+		build = ":MasonUpdate",
+		config = function()
+			require("mason").setup({
+				ui = {
+					border = "rounded",
+					icons = {
+						package_installed = "✓",
+						package_pending = "➜",
+						package_uninstalled = "✗",
+					},
+				},
+			})
+		end,
+	}, -- Mason-LSPConfig bridge (reduced functionality in 0.11+)
+	{
+		"mason-org/mason-lspconfig.nvim",
+		version = "^2.0.0",
+		dependencies = { "mason-org/mason.nvim" },
+		config = function()
+			-- Definitions for gopls
+			--- @class go_dir_custom_args
+			--- @field envvar_id string
+			--- @field custom_subdir string?
 
+			-- Initialization for gopls
+			local mod_cache = nil
+			local std_lib = nil
 
-      cmp.setup({
-         sources = {
-            {name = 'path'},
-            {name = 'nvim_lsp'},
-            {name = 'nvim_lua'},
-            {name = 'luasnip', keyword_length = 2},
-            {name = 'buffer', keyword_length = 3},
-         },
-         snippet = {
-            expand = function(args)
-               require('luasnip').lsp_expand(args.body)
-            end
-         },
-         mapping = cmp.mapping.preset.insert({
-            ['<C-p>'] = cmp.mapping.select_prev_item(cmp_select),
-            ['<C-n>'] = cmp.mapping.select_next_item(cmp_select),
-            ['<CR>'] = cmp.mapping.confirm({ select = true }),
-            ['<C-Space>'] = cmp.mapping.complete(),
-         }),
-      })
+			--INFO: This functions are auxiliar to LSP that I am using
 
-      local lsp_attach = function(client, bufnr)
-         local opts = {buffer = bufnr, remap = false}
+			-- Used to detect when a Rust file being edited is part of an external library or dependency,
+			-- rather than the current project's source code
+			local function is_rust_library(fname)
+				local user_home = vim.fs.normalize(vim.env.HOME)
+				local cargo_home = os.getenv("CARGO_HOME") or user_home .. "/.cargo"
+				local registry = cargo_home .. "/registry/src"
+				local git_registry = cargo_home .. "/git/checkouts"
 
-         vim.keymap.set("n", "gdf", function() vim.lsp.buf.definition() end, opts)
-         vim.keymap.set("n", "gdc", function() vim.lsp.buf.declaration() end, opts)
-         vim.keymap.set("n", "K", function() vim.lsp.buf.hover() end, opts)
-         vim.keymap.set("n", "<leader>vws", function() vim.lsp.buf.workspace_symbol() end, opts)
-         vim.keymap.set("n", "<leader>vd", function() vim.diagnostic.open_float() end, opts)
-         vim.keymap.set("n", "[d", function() vim.diagnostic.goto_next() end, opts)
-         vim.keymap.set("n", "]d", function() vim.diagnostic.goto_prev() end, opts)
-         vim.keymap.set("n", "<leader>vca", function() vim.lsp.buf.code_action() end, opts)
-         vim.keymap.set("n", "<leader>vrr", function() vim.lsp.buf.references() end, opts)
-         vim.keymap.set("n", "<leader>vrn", function() vim.lsp.buf.rename() end, opts)
-         vim.keymap.set("i", "<C-h>", function() vim.lsp.buf.signature_help() end, opts)
+				local rustup_home = os.getenv("RUSTUP_HOME") or user_home .. "/.rustup"
+				local toolchains = rustup_home .. "/toolchains"
 
-         if client.server_capabilities.documentSymbolProvider then
-            require('nvim-navic').attach(client, bufnr)
-         end
+				for _, item in ipairs({ toolchains, registry, git_registry }) do
+					if vim.fs.relpath(item, fname) then
+						local clients = vim.lsp.get_clients({ name = "rust_analyzer" })
+						return #clients > 0 and clients[#clients].config.root_dir or nil
+					end
+				end
+				return nil
+			end
 
-      end
+			local function reload_rust_workspace(bufnr)
+				local clients = vim.lsp.get_clients({ bufnr = bufnr, name = "rust_analyzer" })
+				for _, client in ipairs(clients) do
+					vim.notify("Reloading Cargo Workspace")
+					client.requests("rust-analyzer/reloadWorkspace", nil, function(err)
+						if err then
+							error(tostring(err))
+						end
+						vim.notify("Cargo Workspace reloaded")
+					end, 0)
+				end
+			end
 
-      lsp_zero.extend_lspconfig({
-         capabilities = require('cmp_nvim_lsp').default_capabilities(),
-         lsp_attach = lsp_attach,
-         float_border = 'rounded',
-         sign_text = true,
-      })
+			local function switch_c_cpp_source_header(bufnr)
+				local method_name = "textDocument/switchSourceHeader"
+				local client = vim.lsp.get_clients({ bufnr = bufnr, name = "clangd" })[1]
+				if not client then
+					return vim.notify(
+						("method %s is not supported by any servers active on the current buffer"):format(method_name)
+					)
+				end
+				local params = vim.lsp.util.make_text_document_params(bufnr)
+				client.request(method_name, params, function(err, result)
+					if err then
+						error(tostring(err))
+					end
+					if not result then
+						return vim.notify("Corresponding file cannot be determined")
+					end
+					vim.cmd.edit(vim.uri_from_fname(result))
+				end, bufnr)
+			end
 
-      -- Set navic highlight groups
-      vim.api.nvim_set_hl(0, "NavicIconsFile",          {default = true, bg = "#282828", fg = "#EBDBB2"})
-      vim.api.nvim_set_hl(0, "NavicIconsModule",        {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsNamespace",     {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsPackage",       {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsClass",         {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsMethod",        {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsProperty",      {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsField",         {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsConstructor",   {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsEnum",          {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsInterface",     {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsFunction",      {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsVariable",      {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsConstant",      {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsString",        {default = true, bg = "#282828", fg = "#D3869B"})
-      vim.api.nvim_set_hl(0, "NavicIconsNumber",        {default = true, bg = "#282828", fg = "#8F3F71"})
-      vim.api.nvim_set_hl(0, "NavicIconsBoolean",       {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsArray",         {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsObject",        {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsKey",           {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsNull",          {default = true, bg = "#282828", fg = "#928374"})
-      vim.api.nvim_set_hl(0, "NavicIconsEnumMember",    {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsStruct",        {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsEvent",         {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsOperator",      {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicIconsTypeParameter", {default = true, bg = "#282828", fg = "#83A598"})
-      vim.api.nvim_set_hl(0, "NavicText",               {default = true, bg = "#282828", fg = "#EBDBB2"})
-      vim.api.nvim_set_hl(0, "NavicSeparator",          {default = true, bg = "#282828", fg = "#504945"})
-      require('nvim-navic').setup({
-         highlight = true,
-      })
+			local function symbol_c_cpp_info()
+				local bufnr = vim.api.nvim_get_current_buf()
+				local clangd_client = vim.lsp.get_clients({ bufnr = bufnr, name = "clangd" })[1]
+				if not clangd_client or not clangd_client.supports_method("textDocument/symbolInfo") then
+					return vim.notify("Clangd client not found", vim.log.levels.ERROR)
+				end
+				local win = vim.api.nvim_get_current_win()
+				local params = vim.lsp.util.make_position_params(win, clangd_client.offset_encoding)
+				clangd_client.request("textDocument/symbolInfo", params, function(err, res)
+					if err or #res == 0 then
+						-- Error handled by clangd
+						return
+					end
+					local container = string.format("container: %s", res[1].containerName) ---@type string
+					local name = string.format("name: %s", res[1].name) ---@type string
+					vim.lsp.util.open_floating_preview({ name, container }, "", {
+						height = 2,
+						width = math.max(string.len(name), string.len(container)),
+						focusable = false,
+						focus = false,
+						border = "single",
+						title = "Symbol Info",
+					})
+				end, bufnr)
+			end
 
-      require('mason').setup({})
-      require('mason-lspconfig').setup({
-         ensure_installed = {},
-         automatic_installation = true,
-         handlers = {
-            function (server_name)
-               require('lspconfig')[server_name].setup({})
-            end,
-            lua_ls = function()
-               local lua_opts = lsp_zero.nvim_lua_ls()
-               require('lspconfig').lua_ls.setup(lua_opts)
-            end,
+			---@param custom_args go_dir_custom_args
+			---@param on_complete fun(dir: string | nil)
+			local function identify_go_dir(custom_args, on_complete)
+				local cmd = { "go", "env", custom_args.envvar_id }
+				vim.system(cmd, { text = true }, function(output)
+					local res = vim.trim(output.stdout or "")
+					if output.code == 0 and res ~= "" then
+						if custom_args.custom_subdir and custom_args.custom_subdir ~= "" then
+							res = res .. custom_args.custom_subdir
+						end
+						on_complete(res)
+					else
+						vim.schedule(function()
+							vim.notify(
+								("[gopls] identify " .. custom_args.envvar_id .. " dir cmd failed with code %d: %s\n%s"):format(
+									output.code,
+									vim.inspect(cmd),
+									output.stderr
+								)
+							)
+						end)
+						on_complete(nil)
+					end
+				end)
+			end
 
-         }
-      })
-      require('mason-nvim-dap').setup({
-         ensure_installed = {},
-         automatic_installation = true,
-         handlers = {
-            function(config)
-               require("mason-nvim-dap").default_setup(config)
-            end,
-         }, -- sets up dap in the predefined manner
-      })
-    
-      require('luasnip.loaders.from_vscode').lazy_load()
+			---@return string?
+			local function get_go_std_lib_dir()
+				if std_lib and std_lib ~= "" then
+					return std_lib
+				end
+				identify_go_dir({ envvar_id = "GOROOT", custom_subdir = "/src" }, function(dir)
+					if dir then
+						std_lib = dir
+					end
+				end)
+				return std_lib
+			end
 
-   end,
+			---@return string?
+			local function get_go_mod_cache_dir()
+				if mod_cache and mod_cache ~= "" then
+					return mod_cache
+				end
+				identify_go_dir({ envvar_id = "GOMODCACHE" }, function(dir)
+					if dir then
+						mod_cache = dir
+					end
+				end)
+				return mod_cache
+			end
+
+			---@param fname string
+			---@return string?
+			local function get_go_root(fname)
+				if mod_cache and fname:sub(1, #mod_cache) == mod_cache then
+					local clients = vim.lsp.get_clients({ name = "gopls" })
+					if #clients > 0 then
+						return clients[#clients].config.root_dir
+					end
+				end
+				if std_lib and fname:sub(1, #std_lib) == std_lib then
+					local clients = vim.lsp.get_clients({ name = "gopls" })
+					if #clients > 0 then
+						return clients[#clients].config.root_dir
+					end
+				end
+				return vim.fs.root(fname, "go.work") or vim.fs.root(fname, "go.mod") or vim.fs.root(fname, ".git")
+			end
+
+			local function set_python_path(path)
+				local clients = vim.lsp.get_clients({
+					bufnr = vim.api.nvim_get_current_buf(),
+					name = "basedpyright",
+				})
+				for _, client in ipairs(clients) do
+					if client.settings then
+						client.settings.python =
+							vim.tbl_deep_extend("force", client.settings.python, { pythonPath = path })
+					else
+						client.config.settings =
+							vim.tbl_deep_extend("force", client.config.settings, { python = { pythonPath = path } })
+					end
+					client.notify("workspace/didChangeConfiguration", { settings = nil })
+				end
+			end
+
+			require("mason-lspconfig").setup({
+				ensure_installed = {
+					-- Coding plugins and plugin configuration
+					"lua_ls",
+					-- Assembly
+					"asm_lsp",
+					-- C/C++
+					"clangd",
+					-- Rust
+					"rust_analyzer",
+					-- Go
+					"gopls",
+					-- Python
+					"basedpyright",
+					-- Ruby
+					"ruby_lsp",
+					-- Typescript, javascript
+					"ts_ls",
+					-- Additional
+					"bashls",
+					"jsonls",
+					"yamlls",
+					"neocmake",
+					-- PHP
+					"phpactor",
+					-- html
+					"html",
+					-- Nim
+					"nim_langserver",
+				},
+				automatic_enable = true, -- Uses vim.lsp.enable() automatically
+			})
+
+			-- Native LSP configuration (LUA)
+			vim.lsp.config.lua_ls = {
+				cmd = { "lua-language-server" },
+				filetypes = { "lua" },
+				root_markers = {
+					".luarc.json",
+					".luarc.jsonc",
+					".luacheckrc",
+					".stylua,toml",
+					"stylua.toml",
+					"selene.toml",
+					"selene.yml",
+					".nvim.lua",
+					"init.lua",
+					".git",
+				},
+				settings = {
+					Lua = {
+						-- Runtime configuration for Neovim
+						runtime = {
+							version = "LuaJIT",
+							path = { "lua/?.lua", "lua/?/init.lua" },
+						},
+						-- Diagnostics optimized for Neovim development
+						diagnostics = {
+							globals = {
+								"vim", -- Core vim global
+								"describe", -- For testing frameworks
+								"it", -- For testing frameworks
+								"before_each", -- For testing frameworks
+								"after_each", -- For testing frameworks
+							},
+							disable = {
+								"missing-fields", -- Reduces noise in plugin dev
+							},
+						},
+						-- Workplace configuration for Neovim
+						workspace = {
+							checkThirdParty = false,
+							library = {
+								vim.env.VIMRUNTIME, -- Neovim runtime
+								vim.fn.stdpath("config"), -- Config directory
+								vim.fn.stdpath("data") .. "/lazy", -- Lazy plugin directory
+								-- Specific plugin paths if needed
+								-- '${3rd}/luv/library'                              -- Will be handled by lazydev
+							},
+							maxPreload = 100000,
+							preloadFileSize = 10000,
+						},
+						-- Completion settings
+						completion = {
+							callSnippet = "Replace",
+							keywordSnippet = "Replace",
+							displaycontext = 6,
+						},
+						-- Enhanced hint support
+						hint = {
+							enable = true,
+							arrayIndex = "Disable", -- Reduces visual noise
+							setType = true,
+						},
+						-- Formatting
+						format = { enable = false },
+						-- Telemetry
+						telemetry = { enable = false },
+						-- Semantic tokens (highlighting)
+						semantic = {
+							enable = true,
+							variable = true,
+							annotation = true,
+							keyword = true,
+						},
+					},
+				},
+			}
+
+			---@brief
+			---
+			--- https://clangd.llvm.org/installation.html
+			---
+			--- - NOTE:** Clang >= 11 is recommended! See [#23](https://github.com/neovim/nvim-lspconfig/issues/23).
+			--- - If `compile_commands.json` lives in a build directory, you should
+			---   symlink it to the root of your source tree.
+			---   ```
+			---   ln -s /path/to/myproject/build/compile_commands.json /path/to/myproject/
+			---   ```
+			--- - clangd relies on a [JSON compilation database](https://clang.llvm.org/docs/JSONCompilationDatabase.html)
+			---   specified as compile_commands.json, see https://clangd.llvm.org/installation#compile_commandsjson
+
+			-- C / C++ language server
+			vim.lsp.config.clangd = {
+				cmd = {
+					"clangd",
+					"--background-index",
+					"--clang-tidy",
+					"--header-insertion=iwyu",
+					"--completion-style=detailed",
+					"--function-arg-placeholders",
+					"--fallback-style=llvm",
+					"--pch-storage=memory",
+					"--suggest-missing-includes",
+					"--cross-file-rename",
+				},
+				filetypes = { "c", "cpp", "objc", "objcpp", "cuda", "proto" },
+				root_markers = {
+					".clangd",
+					".clang-tidy",
+					".clang-format",
+					"compile_commands.json",
+					"compile_flags.txt",
+					"configure.ac", -- Autotools
+					".git",
+				},
+				single_file_support = true,
+				capabilities = {
+					textDocument = {
+						completion = {
+							editsNearCursor = true,
+						},
+					},
+					offsetEncoding = { "utf-8", "utf-16" },
+				},
+				on_init = function(client, init_result)
+					---@class ClangdInitializeResult: lsp.InitializeResult
+					---@field offsetEncoding? string
+
+					if init_result.offsetEncoding then
+						client.offset_encoding = init_result.offsetEncoding
+					end
+				end,
+				on_attach = function(_, bufnr)
+					vim.api.nvim_buf_create_user_command(bufnr, "LspClangdSwitchSourceHeader", function()
+						switch_c_cpp_source_header(bufnr)
+					end, { desc = "Switch between C/C++ source/header" })
+
+					vim.api.nvim_buf_create_user_command(bufnr, "LspClangdShowSymbolInfo", function()
+						symbol_c_cpp_info()
+					end, { desc = "Show symbol info" })
+				end,
+				init_options = {
+					usePlaceholders = true,
+					completeUnimported = true,
+					clangdFileStatus = true,
+					fallbackFlags = { "--std=c++23", "--std=c23" },
+				},
+			}
+
+			---@brief
+			---
+			--- https://github.com/rust-lang/rust-analyzer
+			---
+			--- rust-analyzer (aka rls 2.0), a language server for Rust
+			vim.lsp.config.rust_analyzer = {
+				cmd = { "rust-analyzer" },
+				filetypes = { "rust" },
+				single_file_support = true,
+				root_dir = function(bufnr, on_dir)
+					local fname = vim.api.nvim_buf_get_name(bufnr)
+					local reused_dir = is_rust_library(fname)
+					if reused_dir then
+						on_dir(reused_dir)
+						return
+					end
+
+					local cargo_crate_dir = vim.fs.root(fname, { "Cargo.toml" })
+					local cargo_workspace_root
+
+					if cargo_crate_dir == nil then
+						on_dir(
+							vim.fs.root(fname, { "rust-project.json" })
+								or vim.fs.dirname(vim.fs.find(".git", { path = fname, upward = true })[1])
+						)
+						return
+					end
+
+					local cmd = {
+						"cargo",
+						"metadata",
+						"--no-deps",
+						"--format-version",
+						"1",
+						"--manifest-path",
+						cargo_crate_dir .. "/Cargo.toml",
+					}
+
+					vim.system(cmd, { text = true }, function(output)
+						if output.code == 0 then
+							if output.stdout then
+								local result = vim.json.decode(output.stdout)
+								if result["workspace_root"] then
+									cargo_workspace_root = vim.fs.normalize(result["workspace_root"])
+								end
+							end
+							on_dir(cargo_workspace_root or cargo_crate_dir)
+						else
+							vim.schedule(function()
+								vim.notify(
+									("[rust-analyzer] cmd failed with code %d: %s\n%s"):format(
+										output.code,
+										cmd,
+										output.stderr
+									)
+								)
+							end)
+						end
+					end)
+				end,
+				capabilities = {
+					experimental = {
+						serverStatusNotification = true,
+					},
+				},
+				before_init = function(init_params, config)
+					-- As indicated by https://github.com/rust-lang/rust-analyzer/blob/eb5da56d839ae0a9e9f50774fa3eb78eb0964550/docs/dev/lsp-extensions.md?plain=1#L26
+					if config.settings and config.settings["rust-analyzer"] then
+						init_params.initializationOptions = config.settings["rust-analyzer"]
+					end
+				end,
+				on_attach = function(_, bufnr)
+					vim.api.nvim_buf_create_user_command(bufnr, "LspCargoReload", function()
+						reload_rust_workspace(bufnr)
+					end, { desc = "Reload current cargo workspace" })
+				end,
+			}
+
+			---@brief
+			---
+			--- https://github.com/golang/tools/tree/master/gopls
+			---
+			--- Google's lsp server for golang.
+			vim.lsp.config.gopls = {
+				cmd = { "gopls" },
+				filetypes = { "go", "gomod", "gowork", "gotmpl" },
+				root_dir = function(bufnr, on_dir)
+					local fname = vim.api.nvim_buf_get_name(bufnr)
+					get_go_mod_cache_dir()
+					get_go_std_lib_dir()
+					-- see: https://github.com/neovim/nvim-lspconfig/issues/804
+					on_dir(get_go_root(fname))
+				end,
+				settings = {
+					gopls = {
+						completeUnimported = true,
+						usePlaceholders = true,
+						analyses = {
+							unusedparams = true,
+						},
+						staticcheck = true,
+						gofumpt = true,
+					},
+				},
+			}
+
+			---@brief
+			---
+			--- https://github.com/microsoft/pyright
+			---
+			--- `pyright`, a static type checker and language server for python
+			vim.lsp.config.basedpyright = {
+				cmd = { "basedpyright-langserver", "--stdio" },
+				filetypes = { "python" },
+				root_markers = {
+					"pyproject.toml",
+					"setup.py",
+					"setup.cfg",
+					"requirements.txt",
+					"Pipfile",
+					"pyrightconfig.json",
+					".git",
+				},
+				settings = {
+					basedpyright = {
+						analysis = {
+							autoSearchPaths = true,
+							useLibraryCodeForTypes = true,
+							diagnosticMode = "openFilesOnly",
+						},
+					},
+				},
+				on_attach = function(client, bufnr)
+					vim.api.nvim_buf_create_user_command(bufnr, "LspPyrightOrganizeImports", function()
+						client:exec_cmd({
+							command = "basedpyright.organizeimports",
+							arguments = { vim.uri_from_bufnr(bufnr) },
+						})
+					end, {
+						desc = "Organize Imports",
+					})
+					vim.api.nvim_buf_create_user_command(bufnr, "LspPyrightSetPythonPath", set_python_path, {
+						desc = "Reconfigure basedpyright with the provided python path",
+						nargs = 1,
+						complete = "file",
+					})
+				end,
+			}
+
+			---@brief
+			---
+			--- https://shopify.github.io/ruby-lsp/
+			---
+			--- This gem is an implementation of the language server protocol specification for
+			--- Ruby, used to improve editor features.
+			vim.lsp.config.ruby_lsp = {
+				cmd = { "ruby-lsp" },
+				filetypes = { "ruby", "eruby" },
+				root_markers = { "Gemfile", ".git" },
+				init_options = {
+					addonSettings = {
+						-- Enhanced addon settings from comprehensive functionality
+						RubyLSPRails = {
+							-- Ruby LSP rails addon configuration
+							enablePendingMigrationsPrompt = false,
+						},
+						-- RSpec addon settings
+						RubyLSPRspec = {
+							rspeccommand = nil, -- Auto-detect based on binstub/Gemfile
+						},
+						-- Debug addon settings
+						RubyLSPDebug = {
+							enable = true,
+						},
+					},
+				},
+				single_file_support = true,
+				formatter = "rubocop",
+				settings = {
+					ruby = {
+						updateBundleOnSave = true,
+						experimentalFeatures = true,
+					},
+				},
+			}
+
+			---@brief
+			---
+			--- https://github.com/bergercookie/asm-lsp
+			---
+			--- Language Server for NASM/GAS/GO Assembly
+			vim.lsp.config.asm_lsp = {
+				cmd = { "asm-lsp" },
+				filetypes = { "asm", "vmasm", "s", "S" },
+				root_markers = { ".asm-lsp.toml", ".git" },
+			}
+
+			---@brief Language server for bash, written using tree sitter in typescript.
+			--- https://github.com/bash-lsp/bash-language-server
+			vim.lsp.config.bashls = {
+				cmd = { "bash-language-server", "start" },
+				settings = {
+					bashIde = {
+						-- Glob pattern for finding and parsing shell script files in the workspace.
+						-- Used by the background analysis features across files.
+
+						-- Prevent recursive scanning which will cause issues when opening a file
+						-- directly in the home directory (e.g. ~/foo.sh).
+
+						-- Default upstream pattern is "**/*@(.sh|.inc|.bash|.command)".
+						globPattern = vim.env.GLOB_PATTERN or "*@(.sh|.inc|.bash|.command)",
+					},
+				},
+				filetypes = { "bash", "sh" },
+				root_markers = { ".git" },
+			}
+
+			---@brief vscode-json-language-server, a language server for JSON and JSON schema
+			--- https://github.com/microsoft/vscode-json-languageservice
+			vim.lsp.config.jsonls = {
+				cmd = { "vscode-json-language-server", "--stdio" },
+				filetypes = { "json", "jsonc" },
+				init_options = {
+					provideFormatter = true,
+				},
+				root_markers = { ".git" },
+			}
+
+			---@brief yaml-language-server, a language server for YAML and YAML schema
+			--- https://github.com/redhat-developer/yaml-language-server
+			---
+			---  To use a schema for validation, there are two options:
+			---  1. Add a modeline to the file. A modeline is a comment of the form:
+			---  ```
+			---  yaml-language-server: $schema=<urlToTheSchema|relativeFilePath|absoluteFilePath}>
+			---  ```
+			---  where the relative filepath is the path relative to the open yaml file, and the absolute filepath
+			---  is the filepath relative to the filesystem root ('/' on unix systems)
+			---
+			---  2. Associated a schema url, relative, or absolute (to root of project, not to filesystem root) path to
+			---  the a glob pattern relative to the detected project root. Check `:checkhealth vim.lsp` to determine the resolved project
+			---  root:
+			---  ```lua
+			---  vim.lsp.config('yamlls', {
+			---     ...
+			---     settings = {
+			---     yaml = {
+			---     ... -- other settings. Note this overrides the lspconfig defaults
+			---     schemas = {
+			---     ["https://json.schemastore.org/github-workflow.json"] = "/.github/workflows/*",
+			---     ["../path/relative/to/file.yml"] = "/.github/workflows/*",
+			---     ["/path/from/root/of/project"] = "/.github/workflows/*",
+			--- },
+			--- },
+			--- }
+			---  })
+			---  ```
+			vim.lsp.config.yamlls = {
+				cmd = { "yaml-language-server", "--stdio" },
+				filetypes = { "yaml", "yaml.docker-compose", "yaml.gitlab", "yaml.helm-values" },
+				root_markers = { ".git" },
+				settings = {
+					-- https://github.com/redhat-developer/vscode-redhat-telemetry#how-to-disable-telemetry-reporting
+					redhat = { telemetry = { enabled = false } },
+				},
+			}
+
+			---@brief CMake LSP Implementation
+			--- https://github.com/Decodetalkers/neocmakelsp
+			vim.lsp.config.neocmake = {
+				cmd = { "neocmakelsp", "--stdio" },
+				filetypes = { "cmake" },
+				root_markers = { ".git", "build", "cmake" },
+			}
+
+			---@brief Typescript
+			--- https://github.com/typescript-language-server/typescript-language-server
+			vim.lsp.config.ts_ls = {
+				init_options = { hostInfo = "neovim" },
+				cmd = { "typescript-language-server", "--stdio" },
+				filetypes = {
+					"javascript",
+					"javascriptreact",
+					"javascript.jsx",
+					"typescript",
+					"typescriptreact",
+					"typescript.tsx",
+				},
+				root_markers = { "tsconfig.json", "jsconfig.json", "package.json", ".git" },
+				handlers = {
+					-- handle rename request for certain code actions like extracting functions / types
+					["_typescript.rename"] = function(_, result, ctx)
+						local client = assert(vim.lsp.get_client_by_id(ctx.client_id))
+						vim.lsp.util.show_document({
+							uri = result.textDocument.uri,
+							range = {
+								start = result.position,
+								["end"] = result.position,
+							},
+						}, client.offset_encoding)
+						vim.lsp.buf.rename()
+						return vim.NIL
+					end,
+				},
+				on_attach = function(client, bufnr)
+					-- ts_ls provides `source.*` code actions that apply to the whole file. These only appear in
+					-- `vim.lsp.buf.code_action()` if specified in `context.only`.
+					vim.api.nvim_buf_create_user_command(bufnr, "LspTypescriptSourceAction", function()
+						local source_actions = vim.tbl_filter(function(action)
+							return vim.startswith(action, "source.")
+						end, client.server_capabilities.codeActionProvider.codeActionKinds)
+						vim.lsp.buf.code_action({
+							context = {
+								only = source_actions,
+							},
+						})
+					end, {})
+				end,
+			}
+
+			--- @brief
+			--- PHPActor is mainly a PHP Language Server with more features than you can shake a stick at
+			--- https://github.com/phpactor/phpactor
+			vim.lsp.config.phpactor = {
+				cmd = { "phpactor", "language-server" },
+				filetypes = { "php" },
+				root_markers = { ".git", "composer.json", ".phpactor.json", ".phpactor.yml" },
+				init_options = {
+					["blackfire.enabled"] = false,
+				},
+				on_attach = function(client, bufnr)
+					-- Helper function to create floating windows
+					local function create_floating_window(title, syntax, contents)
+						local lines = {}
+						for line in string.gmatch(contents, "[^\n]+") do
+							table.insert(lines, line)
+						end
+
+						local buf = vim.api.nvim_create_buf(false, true)
+						vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+						vim.api.nvim_set_option_value("filetype", syntax, { buf = buf })
+
+						local width = math.floor(vim.o.columns * 0.6)
+						local height = math.floor(vim.o.columns * 0.4)
+						local row = math.floor((vim.o.lines - height) / 2)
+						local col = math.floor((vim.o.columns - width) / 2)
+
+						local win = vim.api.nvim_open_win(buf, true, {
+							relative = "editor",
+							width = width,
+							height = height,
+							row = row,
+							col = col,
+							style = "minimal",
+							border = "rounded",
+							title = title,
+						})
+
+						-- Set keybinding to close window
+						vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = buf, silent = true })
+						vim.keymap.set("n", "<Esc>", "<cmd>close<cr>", { buffer = buf, silent = true })
+
+						return buf, win
+					end
+
+					-- PHPActor reindex function
+					vim.lsp.buf_notify(bufnr, "workspace/executeCommand", {
+						command = "phpactor/indexer/reindex",
+						arguments = {},
+					})
+
+					-- PHPActor status (useful information and statistics)
+					local results_status, _ = vim.lsp.buf_request_sync(bufnr, "phpactor/status", { ["return"] = true })
+					for _, res in pairs(results_status or {}) do
+						pcall(create_floating_window, "PHPActor Status", "markdown", res["result"])
+					end
+
+					-- PHPActor config dump
+					local results_config, _ =
+						vim.lsp.buf_request_sync(bufnr, "phpactor/debug/config", { ["return"] = true })
+					for _, res in pairs(results_config or {}) do
+						pcall(create_floating_window, "PHPActor LSP Configuration", "json", res["result"])
+					end
+				end,
+				workspace_required = true,
+			}
+
+			---@brief
+			--- Microsoft’s vscode-html-languageservice provides HTML language features
+			--- with snippet-based completions and formatting support
+			--- https://github.com/microsoft/vscode-html-languageservice
+			vim.lsp.config.html = {
+				cmd = { "vscode-html-language-server", "--stdio" },
+				filetypes = { "html", "templ", "htmldjango" },
+				root_markers = { "package.json", ".git" },
+				settings = {},
+				init_options = {
+					provideFormatter = true,
+					embeddedLanguages = { css = true, javascript = true },
+					configurationSection = { "html", "css", "javascript" },
+				},
+			}
+		end,
+	}, -- Completion engine
+	{
+		"hrsh7th/nvim-cmp",
+		dependencies = {
+			"hrsh7th/cmp-nvim-lsp",
+			"hrsh7th/cmp-buffer",
+			"hrsh7th/cmp-path",
+			"L3MON4D3/LuaSnip",
+			"saadparwaiz1/cmp_luasnip",
+			"rafamadriz/friendly-snippets",
+		},
+		config = function()
+			local cmp = require("cmp")
+			local capabilities = require("cmp_nvim_lsp").default_capabilities()
+
+			-- Configure native LSP with enhanced capabilities
+			-- En lugar de sobrescribir todo, configura cada LSP individualmente
+			local servers = { "lua_ls", "clangd", "rust_analyzer", "gopls", "pyright", "ruby_lsp" }
+
+			for _, server in ipairs(servers) do
+				local config = vim.lsp.config[server] or {}
+				config.capabilities = vim.tbl_deep_extend("force", config.capabilities or {}, capabilities)
+				vim.lsp.config[server] = config
+			end
+
+			-- Load friendly snippets
+			require("luasnip.loaders.from_vscode").lazy_load()
+
+			cmp.setup({
+				snippet = {
+					expand = function(args)
+						require("luasnip").lsp_expand(args.body)
+					end,
+				},
+				window = {
+					completion = cmp.config.window.bordered(),
+					documentation = cmp.config.window.bordered(),
+				},
+				mapping = cmp.mapping.preset.insert({
+					["<C-p>"] = cmp.mapping.select_prev_item(),
+					["<C-n>"] = cmp.mapping.select_next_item(),
+					["<C-b>"] = cmp.mapping.scroll_docs(-4),
+					["<C-f>"] = cmp.mapping.scroll_docs(4),
+					["<C-Space>"] = cmp.mapping.complete(),
+					["<C-e>"] = cmp.mapping.abort(),
+					["<CR>"] = cmp.mapping.confirm({
+						behavior = cmp.ConfirmBehavior.Replace,
+						select = true,
+					}),
+				}),
+				sources = cmp.config.sources({
+					{ name = "nvim_lsp", priority = 1000 },
+					{ name = "luasnip", priority = 750 },
+					{ name = "buffer", priority = 500 },
+					{ name = "path", priority = 250 },
+				}),
+			})
+		end,
+	}, -- Lua development enhancements
+	{
+		"folke/lazydev.nvim",
+		ft = "lua",
+		opts = { library = { "luvit-meta/library" } },
+		dependencies = { "Bilal2453/luvit-meta" },
+	},
+	{
+		"stevearc/conform.nvim",
+		event = { "BufReadPre", "BufNewFile" },
+		cmd = { "ConformInfo" },
+		keys = {
+			{
+				"<leader>ff",
+				function()
+					require("conform").format({ async = true })
+				end,
+				mode = "",
+				desc = "Format buffer",
+			},
+		},
+		---@module "conform"
+		---@type conform.setupOpts
+		opts = {
+			-- Formatters
+			formatters_by_ft = {
+				lua = { "stylua" },
+				c = { "clang_format" },
+				cpp = { "clang_format" },
+				go = { "goimports, gofumpt" },
+				rust = { "rustfmt" },
+				python = { "black", "isort" },
+				ruby = { "rubocop" },
+				javascript = { "prettierd" },
+				typescript = { "prettierd" },
+				json = { "prettierd" },
+				yaml = { "prettierd" },
+				markdown = { "prettierd" },
+			},
+			-- Default options
+			default_format_opts = { lsp_format = "fallback" },
+			-- Set up format-on-save
+			format_on_save = { timeout_ms = 500 },
+			-- Customize formatters
+			formatters = {
+				gofumpt = {
+					args = { "$FILENAME" },
+					stdin = false,
+				},
+			},
+		},
+	},
+	-- Linter configuration!
+	{
+		"mfussenegger/nvim-lint",
+		event = { "BufReadPre", "BufNewFile" },
+		config = function()
+			local lint = require("lint")
+			lint.linters_by_ft = {
+				lua = { "selene" },
+				c = { "cpplint" },
+				--cpp = { "cpplint" },
+			}
+			-- Create autocmd for linting
+			local lint_augroup = vim.api.nvim_create_augroup("lint", { clear = true })
+			vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "InsertLeave" }, {
+				group = lint_augroup,
+				callback = function()
+					lint.try_lint()
+				end,
+			})
+		end,
+	},
+	{
+		"rshkarin/mason-nvim-lint",
+		dependencies = { "mason-org/mason.nvim", "mfussenegger/nvim-lint" },
+		config = function()
+			require("mason-nvim-lint").setup({
+				ensure_installed = {
+					"selene",
+					--"cpplint",
+				},
+				automatic_installation = true,
+				ignore_install = {},
+				quiet_mode = false,
+			})
+		end,
+	},
+	{
+		"mfussenegger/nvim-dap",
+		dependencies = {
+			"jay-babu/mason-nvim-dap.nvim",
+			"rcarriga/nvim-dap-ui",
+			"nvim-neotest/nvim-nio",
+		},
+		keys = {
+			{
+				"<F5>",
+				function()
+					require("dap").continue()
+				end,
+				desc = "Debug: Start/Continue",
+			},
+			{
+				"<F1>",
+				function()
+					require("dap").step_into()
+				end,
+				desc = "Debug: Step Into",
+			},
+			{
+				"<F2>",
+				function()
+					require("dap").step_over()
+				end,
+				desc = "Debug: Step Over",
+			},
+			{
+				"<F3>",
+				function()
+					require("dap").step_out()
+				end,
+				desc = "Debug: Step Out",
+			},
+			{
+				"<leader>b",
+				function()
+					require("dap").toggle_breakpoint()
+				end,
+				desc = "Debug: Toggle Breakpoint",
+			},
+			{
+				"<leader>du",
+				function()
+					require("dapui").toggle()
+				end,
+				desc = "Debug: Toggle UI",
+			},
+		},
+		config = function()
+			local dap = require("dap")
+			local dapui = require("dapui")
+
+			-- Setup DAP UI
+			dapui.setup()
+
+			-- Auto-open/close DAP UI
+			dap.listeners.before.attach.dapui_config = function()
+				dapui.open()
+			end
+			dap.listeners.before.launch.dapui_config = function()
+				dapui.open()
+			end
+			dap.listeners.before.event_terminated.dapui_config = function()
+				dapui.close()
+			end
+			dap.listeners.before.event_exited.dapui_config = function()
+				dapui.close()
+			end
+		end,
+	},
+
+	{
+		"jay-babu/mason-nvim-dap.nvim",
+		dependencies = { "mason-org/mason.nvim", "mfussenegger/nvim-dap" },
+		config = function()
+			require("mason-nvim-dap").setup({
+				ensure_installed = { "debugpy" },
+				automatic_installation = true,
+				handlers = {}, -- Default configurations unless something is specified.
+			})
+		end,
+	},
 }
