@@ -226,6 +226,8 @@ return {
 					"phpactor",
 					-- html
 					"html",
+					--css,
+					"cssls",
 					-- Nim
 					"nim_langserver",
 				},
@@ -781,6 +783,22 @@ return {
 					configurationSection = { "html", "css", "javascript" },
 				},
 			}
+
+			---@brief
+			--- Microsoft’s vscode-css-languageservice provides CSS language features
+			--- with snippet-based completions and formatting support
+			--- https://github.com/microsoft/vscode-css-languageservice
+			vim.lsp.config.cssls = {
+				cmd = { "vscode-css-language-server", "--stdio" },
+				filetypes = { "css", "scss", "less" },
+				init_options = { provideFormatter = true },
+				root_markers = { "package.json", ".git" },
+				settings = {
+					css = { validate = true },
+					scss = { validate = true },
+					less = { validate = true },
+				},
+			}
 		end,
 	}, -- Completion engine
 	{
@@ -792,6 +810,10 @@ return {
 			"L3MON4D3/LuaSnip",
 			"saadparwaiz1/cmp_luasnip",
 			"rafamadriz/friendly-snippets",
+			{
+				"brenoprata10/nvim-highlight-colors",
+				config = true,
+			},
 		},
 		config = function()
 			local cmp = require("cmp")
@@ -838,6 +860,7 @@ return {
 					{ name = "buffer", priority = 500 },
 					{ name = "path", priority = 250 },
 				}),
+				format = require("nvim-highlight-colors").format,
 			})
 		end,
 	}, -- Lua development enhancements
