@@ -57,7 +57,8 @@ return {
 				local clients = vim.lsp.get_clients({ bufnr = bufnr, name = "rust_analyzer" })
 				for _, client in ipairs(clients) do
 					vim.notify("Reloading Cargo Workspace")
-					client.requests("rust-analyzer/reloadWorkspace", nil, function(err)
+          ---@diagnostic disable-next-line:param-type-mismatch
+					client:request("rust-analyzer/reloadWorkspace", nil, function(err)
 						if err then
 							error(tostring(err))
 						end
@@ -66,16 +67,17 @@ return {
 				end
 			end
 
-			local function switch_c_cpp_source_header(bufnr)
+			local function switch_c_cpp_source_header(bufnr, client)
 				local method_name = "textDocument/switchSourceHeader"
-				local client = vim.lsp.get_clients({ bufnr = bufnr, name = "clangd" })[1]
-				if not client then
+        ---@diagnostic disable-next-line:param-type-mismatch
+				if not client or not client:supports_method(method_name) then
 					return vim.notify(
 						("method %s is not supported by any servers active on the current buffer"):format(method_name)
 					)
 				end
 				local params = vim.lsp.util.make_text_document_params(bufnr)
-				client.request(method_name, params, function(err, result)
+        ---@diagnostic disable-next-line:param-type-mismatch
+				client:request(method_name, params, function(err, result)
 					if err then
 						error(tostring(err))
 					end
@@ -86,17 +88,18 @@ return {
 				end, bufnr)
 			end
 
-			local function symbol_c_cpp_info()
-				local bufnr = vim.api.nvim_get_current_buf()
-				local clangd_client = vim.lsp.get_clients({ bufnr = bufnr, name = "clangd" })[1]
-				if not clangd_client or not clangd_client.supports_method("textDocument/symbolInfo") then
+			local function symbol_c_cpp_info(bufnr, client)
+        local method_name = 'textDocument/symbolInfo'
+        ---@diagnostic disable-next-line:param-type-mismatch
+				if not client or not client:supports_method(method_name) then
 					return vim.notify("Clangd client not found", vim.log.levels.ERROR)
 				end
 				local win = vim.api.nvim_get_current_win()
-				local params = vim.lsp.util.make_position_params(win, clangd_client.offset_encoding)
-				clangd_client.request("textDocument/symbolInfo", params, function(err, res)
+				local params = vim.lsp.util.make_position_params(win, client.offset_encoding)
+        ---@diagnostic disable-next-line:param-type-mismatch
+				client:request(method_name, params, function(err, res)
 					if err or #res == 0 then
-						-- Error handled by clangd
+						-- Clangd always returns an error, there is no reason to parse it
 						return
 					end
 					local container = string.format("container: %s", res[1].containerName) ---@type string
@@ -106,7 +109,6 @@ return {
 						width = math.max(string.len(name), string.len(container)),
 						focusable = false,
 						focus = false,
-						border = "single",
 						title = "Symbol Info",
 					})
 				end, bufnr)
@@ -199,6 +201,127 @@ return {
 				end
 			end
 
+      local function buf_latex_build(client, bufnr)
+        local win = vim.api.nvim_get_current_win()
+        local params = vim.lsp.util.make_position_params(win, client.offset_encoding)
+        client:request('textDocument/build', params, function(err, result)
+          if err then
+            error(tostring(err))
+          end
+          local texlab_build_status = {
+            [0] = 'Success',
+            [1] = 'Error',
+            [2] = 'Failure',
+            [3] = 'Cancelled',
+          }
+          vim.notify('Build ' .. texlab_build_status[result.status], vim.log.levels.INFO)
+        end, bufnr)
+      end
+
+      local function buf_latex_search(client, bufnr)
+        local win = vim.api.nvim_get_current_win()
+        local params = vim.lsp.util.make_position_params(win, client.offset_encoding)
+        client:request('textDocument/forwardSearch', params, function(err, result)
+          if err then
+            error(tostring(err))
+          end
+          local texlab_forward_status = {
+            [0] = 'Success',
+            [1] = 'Error',
+            [2] = 'Failure',
+            [3] = 'Unconfigured',
+          }
+          vim.notify('Search ' .. texlab_forward_status[result.status], vim.log.levels.INFO)
+        end, bufnr)
+      end
+
+      local function buf_latex_cancel_build(client,bufnr)
+        return client:exec_cmd({
+          title = 'cancel',
+          command = 'texlab.cancelBuild',
+        }, { bufnr = bufnr })
+      end
+
+
+      local function dependency_latex_graph(client)
+        client:exec_cmd({ command = 'texlab.showDependencyGraph' }, { bufnr = 0 }, function(err, result)
+          if err then
+            return vim.notify(err.code .. ': ' .. err.message, vim.log.levels.ERROR)
+          end
+          vim.notify('The dependency graph has been generated:\n' .. result, vim.log.levels.INFO)
+        end)
+      end
+
+      local function command_latex_factory(cmd)
+        local cmd_tbl = {
+          Auxiliary = 'texlab.cleanAuxiliary',
+          Artifacts = 'texlab.cleanArtifacts',
+        }
+        return function(client, bufnr)
+          return client:exec_cmd({
+            title = ('clean_%s'):format(cmd),
+            command = cmd_tbl[cmd],
+            arguments = { { uri = vim.uri_from_bufnr(bufnr) } },
+          }, { bufnr = bufnr }, function(err, _)
+            if err then
+              vim.notify(('Failed to clean %s files: %s'):format(cmd, err.message), vim.log.levels.ERROR)
+            else
+              vim.notify(('Command %s executed successfully'):format(cmd), vim.log.levels.INFO)
+            end
+          end)
+        end
+      end
+
+      local function buf_latex_find_envs(client, bufnr)
+        local win = vim.api.nvim_get_current_win()
+        client:exec_cmd({
+          command = 'texlab.findEnvironments',
+          arguments = { vim.lsp.util.make_position_params(win, client.offset_encoding) },
+        }, { bufnr = bufnr }, function(err, result)
+          if err then
+            return vim.notify(err.code .. ': ' .. err.message, vim.log.levels.ERROR)
+          end
+          local env_names = {}
+          local max_length = 1
+          for _, env in ipairs(result) do
+            table.insert(env_names, env.name.text)
+            max_length = math.max(max_length, string.len(env.name.text))
+          end
+          for i, name in ipairs(env_names) do
+            env_names[i] = string.rep(' ', i - 1) .. name
+          end
+          vim.lsp.util.open_floating_preview(env_names, '', {
+            height = #env_names,
+            width = math.max((max_length + #env_names - 1), (string.len 'Environments')),
+            focusable = false,
+            focus = false,
+            title = 'Environments',
+          })
+        end)
+      end
+
+      local function buf_latex_change_env(client, bufnr)
+        local new
+        vim.ui.input({ prompt = 'New environment name: ' }, function(input)
+          new = input
+        end)
+        if not new or new == '' then
+          return vim.notify('No environment name provided', vim.log.levels.WARN)
+        end
+        local pos = vim.api.nvim_win_get_cursor(0)
+        return client:exec_cmd({
+          title = 'change_environment',
+          command = 'texlab.changeEnvironment',
+          arguments = {
+            {
+              textDocument = { uri = vim.uri_from_bufnr(bufnr) },
+              position = { line = pos[1] - 1, character = pos[2] },
+              newName = tostring(new),
+            },
+          },
+        }, { bufnr = bufnr })
+      end
+
 			require("mason-lspconfig").setup({
 				ensure_installed = {
 					-- Coding plugins and plugin configuration
@@ -230,6 +353,8 @@ return {
 					"cssls",
 					-- Nim
 					"nim_langserver",
+          -- LaTeX
+          "texlab"
 				},
 				automatic_enable = true, -- Uses vim.lsp.enable() automatically
 			})
@@ -364,13 +489,15 @@ return {
 						client.offset_encoding = init_result.offsetEncoding
 					end
 				end,
-				on_attach = function(_, bufnr)
+        ---@param client vim.lsp.Client
+        ---@param bufnr integer
+				on_attach = function(client, bufnr)
 					vim.api.nvim_buf_create_user_command(bufnr, "LspClangdSwitchSourceHeader", function()
-						switch_c_cpp_source_header(bufnr)
+						switch_c_cpp_source_header(bufnr,client)
 					end, { desc = "Switch between C/C++ source/header" })
 
 					vim.api.nvim_buf_create_user_command(bufnr, "LspClangdShowSymbolInfo", function()
-						symbol_c_cpp_info()
+						symbol_c_cpp_info(bufnr, client)
 					end, { desc = "Show symbol info" })
 				end,
 				init_options = {
@@ -685,6 +812,32 @@ return {
 						return vim.NIL
 					end,
 				},
+        commands = {
+          ['editor.action.showReferences'] = function(command, ctx)
+            local client = assert(vim.lsp.get_client_by_id(ctx.client_id))
+            local file_uri, position, references = unpack(command.arguments)
+            local quickfix_items = vim.lsp.util.locations_to_items(references, client.offset_encoding)
+
+            vim.fn.setqflist({}, ' ', {
+              title = command.title,
+              items = quickfix_items,
+              context = {
+                command = command,
+                bufnr = ctx.bufnr,
+              },
+            })
+
+            vim.lsp.util.show_document({
+              url = file_uri,
+              range = {
+                start = position,
+                ['end'] = position,
+              },
+            }, client.offset_encoding)
+
+            vim.cmd('botright copen')
+          end,
+        },
 				on_attach = function(client, bufnr)
 					-- ts_ls provides `source.*` code actions that apply to the whole file. These only appear in
 					-- `vim.lsp.buf.code_action()` if specified in `context.only`.
@@ -799,6 +952,60 @@ return {
 					less = { validate = true },
 				},
 			}
+
+      ---@brief
+      --- A completion engine built from scratch for (La)TeX
+      --- https://github.com/latex-lsp/texlab
+      vim.lsp.config.texlab = {
+        cmd = {' textlab '},
+        filetypes = { 'tex', 'plaintex', 'bib' },
+        root_markers = { '.git', '.latexmkrc', 'latexmkrc', '.texlabroot', 'texlabroot', 'Tectonic.toml'},
+        settings = {
+          texlab = {
+            rootDirectory = nil,
+            build = {
+              executable = "latexmk",
+              args = { '-pdf', '-interaction=nonstopmode', '-synctex=1', '%f' },
+              onSave = false,
+              forwardSearchAfter = false,
+            },
+            forwardSearch = {
+              executable = nil,
+              args = {},
+            },
+            chktex = {
+              onOpenAndSave = false,
+              onEdit = false,
+            },
+            diagnosticsDelay = 300,
+            latexFormatter = 'latexindent',
+            latexindent = {
+              ['local'] = nil, --local is a reserved keyword
+              modifyLineBreaks = false,
+            },
+            bibtexFormatter = 'texlab',
+            formatterLineLength = 80,
+          },
+        },
+        ---@param client vim.lsp.Client
+        ---@param bufnr integer
+        on_attach = function (client, bufnr)
+          for _, cmd in ipairs({
+            { name = 'TexlabBuild', fn = buf_latex_build, desc = "Build the current buffer"},
+            { name = 'TexlabForward', fn = buf_latex_search, desc = "Forward search from current position"},
+            { name = 'TexlabCancelBuild', fn = buf_latex_cancel_build, desc = "Cancel the current build"},
+            { name = 'TexlabDependencyGraph', fn = dependency_latex_graph, desc = "Show the dependency graph"},
+            { name = 'TexlabCleanArtifacts', fn = command_latex_factory('Artifacts'), desc = "Clean the artifacts"},
+            { name = 'TexlabCleanAuxiliary', fn = command_latex_factory('Auxiliary'), desc = "Clean the auxiliary files"},
+            { name = 'TexlabFindEnvironments', fn = buf_latex_find_envs, desc = "Find the environments at current position"},
+            { name = 'TexlabChangeEnvironments', fn = buf_latex_change_env, desc = "Change the environment at current position"},
+          }) do
+            vim.api.nvim_buf_create_user_command(bufnr, 'Lsp' .. cmd.name, function()
+              cmd.fn(client, bufnr)
+            end, { desc = cmd.desc })
+          end
+        end
+      }
 		end,
 	}, -- Completion engine
 	{
